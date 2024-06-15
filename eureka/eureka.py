@@ -10,15 +10,20 @@ import subprocess
 from pathlib import Path
 import shutil
 import time 
+from omegaconf import OmegaConf
 
 from utils.misc import * 
 from utils.extract_task_code import *
 
-EUREKA_ROOT_DIR = os.getcwd()
+# EUREKA_ROOT_DIR = os.getcwd()
+EUREKA_ROOT_DIR = Path(__file__).resolve().parent
+
 ROOT_DIR = f"{EUREKA_ROOT_DIR}/.."
 
 @hydra.main(config_path="cfg", config_name="config", version_base="1.1")
 def main(cfg):
+    # show config
+    logging.info(OmegaConf.to_yaml(cfg))
     workspace_dir = Path.cwd()
     logging.info(f"Workspace: {workspace_dir}")
     logging.info(f"Project Root: {EUREKA_ROOT_DIR}")
@@ -79,6 +84,7 @@ def main(cfg):
             if total_samples >= cfg.sample:
                 break
             for attempt in range(3):
+                logging.info(f"Iteration {iter}: Attempt {attempt+1} with chunk size {chunk_size}")
                 try:
                     response_cur = openai.ChatCompletion.create(
                         model=model,
@@ -86,6 +92,7 @@ def main(cfg):
                         temperature=cfg.temperature,
                         n=chunk_size
                     )
+                    # logging.info(f"Iteration {iter}: Response {response_cur}")
                     total_samples += chunk_size
                     break
                 except Exception as e:
@@ -163,7 +170,9 @@ def main(cfg):
                 command = command.split(" ")
                 if not cfg.use_wandb:
                     command.append("--no-wandb")
+                logging.info(f"Iteration {iter}: Running command: {command}")
                 process = subprocess.Popen(command, stdout=f, stderr=f)
+            logging.info(f"Iteration {iter}: Waiting for training to finish...")
             block_until_training(rl_filepath, success_keyword=cfg.env.success_keyword, failure_keyword=cfg.env.failure_keyword,
                                  log_status=True, iter_num=iter, response_id=response_id)
             rl_runs.append(process)
