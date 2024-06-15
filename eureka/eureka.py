@@ -15,10 +15,49 @@ from omegaconf import OmegaConf
 from utils.misc import * 
 from utils.extract_task_code import *
 
+logging.basicConfig(level=logging.DEBUG)
+
 # EUREKA_ROOT_DIR = os.getcwd()
 EUREKA_ROOT_DIR = Path(__file__).resolve().parent
 
 ROOT_DIR = f"{EUREKA_ROOT_DIR}/.."
+if os.getenv("CONDA_PREFIX") is None:
+    PYTHON_PATH = "python"
+else:
+    PYTHON_PATH = os.getenv("CONDA_PREFIX") + "/bin/python"
+CONDA_ENV_NAME = "dreureka-38"
+    
+def run_subprocess(command, log_file, env_vars=None):
+    # Construct the command using the conda environment's Python interpreter
+    full_command = [PYTHON_PATH] + command
+    
+    # Get the current environment variables
+    env = os.environ.copy()
+    
+    # Update the environment variables with any additional ones provided, filtering out None values
+    if env_vars:
+        env.update({k: v for k, v in env_vars.items() if v is not None})
+    
+    with open(log_file, 'w') as f:
+        process = subprocess.Popen(
+            full_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env
+        )
+        
+        while True:
+            output = process.stdout.readline()
+            if output == '' and process.poll() is not None:
+                break
+            if output:
+                logging.info(output.strip())
+                f.write(output)
+        
+        err = process.stderr.read()
+        if err:
+            logging.error(err)
+            f.write(err)
+        
+        return process.poll()
+
 
 @hydra.main(config_path="cfg", config_name="config", version_base="1.1")
 def main(cfg):
@@ -162,20 +201,41 @@ def main(cfg):
 
             # Find the freest GPU to run GPU-accelerated RL
             set_freest_gpu()
+
+            additional_env_vars = {
+                "LD_LIBRARY_PATH": os.environ.get("LD_LIBRARY_PATH"),
+                "CUDA_HOME": os.environ.get("CUDA_HOME"),
+                "PATH": os.getenv("PATH"),
+                "DISPLAY": ":0",  # Add DISPLAY variable for headless operation
+                "EGL_DEVICE_ID": "0",  # Add EGL_DEVICE_ID for headless operation
+                "MUJOCO_GL": "egl",  # Add MUJOCO_GL for headless operation
+                "LD_PRELOAD": "/usr/lib/x86_64-linux-gnu/libstdc++.so.6",  # Adjust as necessary
+                "CUDA_DEVICE_ORDER": "PCI_BUS_ID",
+                "CUDA_VISIBLE_DEVICES": "0",  # Set to the specific GPU you want to use
+                "OMPI_MCA_btl_vader_single_copy_mechanism": "none",
+                "PYTHONPATH": os.getenv("PYTHONPATH", "")  # Adjust as necessary
+            }
+            logging.info(f"additional_env_vars: {additional_env_vars}")
             
             # Execute the python file with flags
             rl_filepath = f"env_iter{iter}_response{response_id}.txt"
             with open(rl_filepath, 'w') as f:
-                command = f"python -u {ROOT_DIR}/{env_name}/{cfg.env.train_script} --iterations {cfg.env.train_iterations} --dr-config off --reward-config eureka"
+                # command = f"{PYTHON_PATH} -u {ROOT_DIR}/{env_name}/{cfg.env.train_script} --iterations {cfg.env.train_iterations} --dr-config off --reward-config eureka"
+                # command = f"python -u {ROOT_DIR}/{env_name}/{cfg.env.train_script} --iterations {cfg.env.train_iterations} --dr-config off --reward-config eureka"
+                command = f"-u {ROOT_DIR}/{env_name}/{cfg.env.train_script} --iterations {cfg.env.train_iterations} --dr-config off --reward-config eureka"
                 command = command.split(" ")
                 if not cfg.use_wandb:
                     command.append("--no-wandb")
                 logging.info(f"Iteration {iter}: Running command: {command}")
-                process = subprocess.Popen(command, stdout=f, stderr=f)
+                # process = subprocess.Popen(command, stdout=f, stderr=f)
+                exit_code = run_subprocess(command, rl_filepath, additional_env_vars)
+                if exit_code != 0:
+                    logging.error(f"Command failed with exit code {exit_code}")
             logging.info(f"Iteration {iter}: Waiting for training to finish...")
             block_until_training(rl_filepath, success_keyword=cfg.env.success_keyword, failure_keyword=cfg.env.failure_keyword,
                                  log_status=True, iter_num=iter, response_id=response_id)
-            rl_runs.append(process)
+            # rl_runs.append(process)
+            rl_runs.append(exit_code)
 
         # Gather RL training results and construct reward reflection
         code_feedbacks = []
