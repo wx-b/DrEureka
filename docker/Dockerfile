@@ -99,7 +99,9 @@ WORKDIR /opt
 
 RUN git clone --branch docker https://github.com/wx-b/DrEureka.git
 RUN cd DrEureka && pip install -e .
+WORKDIR /opt/DrEureka
 RUN cd forward_locomotion && pip install -e .
+WORKDIR /opt/DrEureka
 RUN cd globe_walking && pip install -e .
 
 WORKDIR /opt
