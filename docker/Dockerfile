@@ -94,3 +94,13 @@ RUN git clone https://github.com/NVIDIA-Omniverse/IsaacGymEnvs.git
 RUN cd IsaacGymEnvs && pip install -e .
 
 RUN pip install loguru
+
+WORKDIR /opt
+
+RUN git clone --branch docker https://github.com/wx-b/DrEureka.git
+RUN cd DrEureka && pip install -e .
+COPY DrEureka/.env.example DrEureka/.env
+RUN cd forward_locomotion && pip install -e .
+RUN cd globe_walking && pip install -e .
+
+WORKDIR /opt
