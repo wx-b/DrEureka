@@ -94,17 +94,17 @@ def train_mc(iterations, command_config, reward_config, dr_config, eureka_target
             lock_file = acquire_lock()
 
             if lock_file is None:
-                logger.info("Another instance is running. Waiting.")
+                logger.log_text("Another instance is running. Waiting.")
                 time.sleep(10)
                 continue
 
             if count_running_processes() >= parallel_tasks:
-                logger.info("Maximum number of processes running. Waiting.")
+                logger.log_text("Maximum number of processes running. Waiting.")
                 time.sleep(10)
                 continue
 
             add_process_to_lock_file(pid)
-            logger.info(f"Process {pid} is running.")
+            logger.log_text(f"Process {pid} is running.")
 
             config_go1(Cfg)
             if command_config == "original" or command_config == "constrained":
@@ -143,7 +143,7 @@ def train_mc(iterations, command_config, reward_config, dr_config, eureka_target
             remove_process_from_lock_file(pid)
             fcntl.flock(lock_file, fcntl.LOCK_UN)
             lock_file.close()
-            logger.info(f"Process {pid} has finished.")
+            logger.log_text(f"Process {pid} has finished.")
 
 
 if __name__ == '__main__':
