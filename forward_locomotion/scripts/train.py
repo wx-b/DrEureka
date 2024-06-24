@@ -90,17 +90,16 @@ def train_mc(iterations, command_config, reward_config, dr_config, eureka_target
     pid = os.getpid()
 
     while True:
+        task_finished = False
         try:
             lock_file = acquire_lock()
 
             if lock_file is None:
                 logger.log_text("Another instance is running. Waiting.")
-                time.sleep(10)
                 continue
 
             if count_running_processes() >= parallel_tasks:
                 logger.log_text("Maximum number of processes running. Waiting.")
-                time.sleep(10)
                 continue
 
             add_process_to_lock_file(pid)
@@ -139,11 +138,17 @@ def train_mc(iterations, command_config, reward_config, dr_config, eureka_target
             gpu_id = 0
             runner = Runner(env, device=f"cuda:{gpu_id}")
             runner.learn(num_learning_iterations=iterations, init_at_random_ep_len=True, eval_freq=100)
+            task_finished = True
         finally:
             remove_process_from_lock_file(pid)
-            fcntl.flock(lock_file, fcntl.LOCK_UN)
-            lock_file.close()
-            logger.log_text(f"Process {pid} has finished.")
+            if lock_file:
+                fcntl.flock(lock_file, fcntl.LOCK_UN)
+                lock_file.close()
+            if task_finished:
+                logger.log_text(f"Process {pid} has finished.")
+                break
+            else:
+                time.sleep(10)
 
 
 if __name__ == '__main__':
