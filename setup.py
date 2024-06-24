@@ -9,7 +9,7 @@ setup(
     packages=find_packages(),
     author_email='willjhliang@gmail.com',
     install_requires=[
-        "openai==0.28.0",
+        "openai",
         "hydra-core",
     ]
 )

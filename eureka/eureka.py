@@ -1,6 +1,6 @@
 import hydra
 import numpy as np 
-import json
+import yaml
 import logging 
 import matplotlib.pyplot as plt
 import os
@@ -23,7 +23,16 @@ def main(cfg):
     logging.info(f"Workspace: {workspace_dir}")
     logging.info(f"Project Root: {EUREKA_ROOT_DIR}")
 
-    openai.api_key = os.getenv("OPENAI_API_KEY")
+    model_name = cfg.model
+    llm_config_path = os.path.expanduser('~/.metagpt/config2.yaml')
+    assert os.path.exists(llm_config_path), f"Model config file not found at {llm_config_path}"
+    with open(llm_config_path, 'r') as f:
+        llm_config_dict = yaml.safe_load(f)
+    llm_config = llm_config_dict['llms'][model_name]
+
+    openai_client = openai.OpenAI(api_key=llm_config['api_key'],
+                                  base_url=llm_config['base_url']
+                                  )
 
     task = cfg.env.task
     task_description = cfg.env.description
@@ -80,7 +89,7 @@ def main(cfg):
                 break
             for attempt in range(3):
                 try:
-                    response_cur = openai.ChatCompletion.create(
+                    response_cur = openai_client.chat.completions.create(
                         model=model,
                         messages=messages,
                         temperature=cfg.temperature,
@@ -98,13 +107,13 @@ def main(cfg):
                 logging.info("Code terminated due to too many failed attempts!")
                 exit()
 
-            responses.extend(response_cur["choices"])
-            prompt_tokens = response_cur["usage"]["prompt_tokens"]
-            total_completion_token += response_cur["usage"]["completion_tokens"]
-            total_token += response_cur["usage"]["total_tokens"]
+            responses.extend(response_cur.choices)
+            prompt_tokens = response_cur.usage.prompt_tokens
+            total_completion_token += response_cur.usage.completion_tokens
+            total_token += response_cur.usage.total_tokens
 
         if cfg.sample == 1:
-            logging.info(f"Iteration {iter}: GPT Output:\n " + responses[0]["message"]["content"] + "\n")
+            logging.info(f"Iteration {iter}: GPT Output:\n " + responses[0].message.content + "\n")
 
         # Logging Token Information
         logging.info(f"Iteration {iter}: Prompt Tokens: {prompt_tokens}, Completion Tokens: {total_completion_token}, Total Tokens: {total_token}")
@@ -112,7 +121,7 @@ def main(cfg):
         code_runs = [] 
         rl_runs = []
         for response_id in range(cfg.sample):
-            response_cur = responses[response_id]["message"]["content"]
+            response_cur = responses[response_id].message.content
             logging.info(f"Iteration {iter}: Processing Code Run {response_id}")
 
             # Regex patterns to extract python code enclosed in GPT response
@@ -272,7 +281,7 @@ def main(cfg):
 
         logging.info(f"Iteration {iter}: Max Success: {max_success}, Execute Rate: {execute_rate}, Max Success Reward Correlation: {max_success_reward_correlation}")
         logging.info(f"Iteration {iter}: Best Generation ID: {best_sample_idx}")
-        logging.info(f"Iteration {iter}: GPT Output Content:\n" +  responses[best_sample_idx]["message"]["content"] + "\n")
+        logging.info(f"Iteration {iter}: GPT Output Content:\n" +  responses[best_sample_idx].message.content + "\n")
         logging.info(f"Iteration {iter}: User Content:\n" + best_content + "\n")
             
         # Plot the success rate
@@ -294,11 +303,11 @@ def main(cfg):
         np.savez('summary.npz', max_successes=max_successes, execute_rates=execute_rates, best_code_paths=best_code_paths, max_successes_reward_correlation=max_successes_reward_correlation)
 
         if len(messages) == 2:
-            messages += [{"role": "assistant", "content": responses[best_sample_idx]["message"]["content"]}]
+            messages += [{"role": "assistant", "content": responses[best_sample_idx].message.content}]
             messages += [{"role": "user", "content": best_content}]
         else:
             assert len(messages) == 4
-            messages[-2] = {"role": "assistant", "content": responses[best_sample_idx]["message"]["content"]}
+            messages[-2] = {"role": "assistant", "content": responses[best_sample_idx].message.content}
             messages[-1] = {"role": "user", "content": best_content}
 
         # Save dictionary as JSON file
