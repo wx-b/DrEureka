@@ -31,7 +31,8 @@ def main(cfg):
     llm_config = llm_config_dict['llms'][model_name]
 
     openai_client = openai.OpenAI(api_key=llm_config['api_key'],
-                                  base_url=llm_config['base_url']
+                                  base_url=llm_config['base_url'],
+                                  timeout=llm_config['timeout']
                                   )
 
     task = cfg.env.task
