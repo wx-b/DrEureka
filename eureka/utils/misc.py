@@ -38,6 +38,7 @@ def block_until_training(rl_filepath, success_keyword, failure_keyword, log_stat
                 logging.info(f"Iteration {iter_num}: Code Run {response_id} successfully training!")
             if log_status and "Traceback" in rl_log:
                 logging.info(f"Iteration {iter_num}: Code Run {response_id} execution error!")
+                logging.error(rl_log['Traceback'])
             break
 
 def construct_run_log(stdout_str):
