@@ -145,10 +145,10 @@ def train_mc(iterations, command_config, reward_config, dr_config, eureka_target
             runner.learn(num_learning_iterations=iterations, init_at_random_ep_len=True, eval_freq=100)
             task_finished = True
         finally:
-            remove_process_from_lock_file(pid)
             if lock_file:
                 fcntl.flock(lock_file, fcntl.LOCK_UN)
                 lock_file.close()
+            remove_process_from_lock_file(pid)
             if task_finished:
                 logger.log_text(f"Process {pid} has finished.")
                 break
