@@ -91,7 +91,7 @@ def train_mc(iterations, command_config, reward_config, dr_config, eureka_target
 
     while True:
         lock_file = None
-        task_finished = False
+        task_started = False
         try:
             lock_file = acquire_lock()
 
@@ -109,6 +109,7 @@ def train_mc(iterations, command_config, reward_config, dr_config, eureka_target
                 lock_file.close()
             lock_file = None
             logger.log_text(f"Process {pid} is running.")
+            task_started = True
 
             config_go1(Cfg)
             if command_config == "original" or command_config == "constrained":
@@ -143,13 +144,12 @@ def train_mc(iterations, command_config, reward_config, dr_config, eureka_target
             gpu_id = 0
             runner = Runner(env, device=f"cuda:{gpu_id}")
             runner.learn(num_learning_iterations=iterations, init_at_random_ep_len=True, eval_freq=100)
-            task_finished = True
         finally:
             if lock_file:
                 fcntl.flock(lock_file, fcntl.LOCK_UN)
                 lock_file.close()
             remove_process_from_lock_file(pid)
-            if task_finished:
+            if task_started:
                 logger.log_text(f"Process {pid} has finished.")
                 break
             else:
