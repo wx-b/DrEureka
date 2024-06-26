@@ -1,46 +1,8 @@
 import argparse
-import os
-import sys
-import fcntl
-import time
 
-
-LOCK_FILE = '/tmp/process_limiter.lock'
-
-
-def acquire_lock():
-    """Acquire a lock on the lock file."""
-    lock_file = open(LOCK_FILE, 'a+')
-    try:
-        fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        return lock_file
-    except IOError:
-        lock_file.close()
-        return None
-
-def count_running_processes():
-    """Count the number of running processes by checking the lock file."""
-    with open(LOCK_FILE, 'r') as f:
-        lines = f.readlines()
-    return len(lines)
-
-def add_process_to_lock_file(pid):
-    """Add the current process PID to the lock file."""
-    with open(LOCK_FILE, 'a') as f:
-        f.write(f"{pid}\n")
-
-def remove_process_from_lock_file(pid):
-    """Remove the current process PID from the lock file."""
-    with open(LOCK_FILE, 'r') as f:
-        lines = f.readlines()
-    with open(LOCK_FILE, 'w') as f:
-        for line in lines:
-            if line.strip() != str(pid):
-                f.write(line)
 
 def train_mc(iterations, command_config, reward_config, dr_config, eureka_target_velocity=None,
-             headless=True, no_wandb=False, wandb_group=None, wandb_prefix=None, seed=0, parallel_tasks=2):
-
+             headless=True, no_wandb=False, wandb_group=None, wandb_prefix=None, seed=0):
     import os
     import shutil
     import isaacgym
@@ -87,68 +49,39 @@ def train_mc(iterations, command_config, reward_config, dr_config, eureka_target
     else:
         raise NotImplementedError
 
-    pid = os.getpid()
+    config_go1(Cfg)
+    if command_config == "original" or command_config == "constrained":
+        Cfg.commands.command_curriculum = True
+        Cfg.env.observe_command = True
+        Cfg.env.num_observations = 42
+    else:
+        Cfg.commands.command_curriculum = False
 
-    while True:
-        task_finished = False
-        try:
-            lock_file = acquire_lock()
+    env = VelocityTrackingEasyEnv(sim_device='cuda:0', headless=headless, cfg=Cfg)
 
-            if lock_file is None:
-                logger.log_text("Another instance is running. Waiting.")
-                continue
+    logger.log_params(AC_Args=vars(AC_Args), PPO_Args=vars(PPO_Args), RunnerArgs=vars(RunnerArgs),
+                      Cfg=vars(Cfg))
+    run_name = logger.prefix.split("/")[-1]
+    name_prefix = wandb_group + "/" if wandb_group is not None else ""
+    name_prefix = name_prefix + wandb_prefix + "_" if wandb_prefix is not None else name_prefix
+    wandb.init(
+        project="forward_locomotion",
+        entity="upenn-pal",
+        name=f"{name_prefix}{run_name}",
+        group=wandb_group,
+        config={
+            "AC_Args": vars(AC_Args),
+            "PPO_Args": vars(PPO_Args),
+            "RunnerArgs": vars(RunnerArgs),
+            "Cfg": vars(Cfg),
+        },
+        mode="disabled" if no_wandb else "online",
+    )
 
-            if count_running_processes() >= parallel_tasks:
-                logger.log_text("Maximum number of processes running. Waiting.")
-                continue
-
-            add_process_to_lock_file(pid)
-            logger.log_text(f"Process {pid} is running.")
-
-            config_go1(Cfg)
-            if command_config == "original" or command_config == "constrained":
-                Cfg.commands.command_curriculum = True
-                Cfg.env.observe_command = True
-                Cfg.env.num_observations = 42
-            else:
-                Cfg.commands.command_curriculum = False
-
-            env = VelocityTrackingEasyEnv(sim_device='cuda:0', headless=headless, cfg=Cfg)
-
-            logger.log_params(AC_Args=vars(AC_Args), PPO_Args=vars(PPO_Args), RunnerArgs=vars(RunnerArgs),
-                              Cfg=vars(Cfg))
-            run_name = logger.prefix.split("/")[-1]
-            name_prefix = wandb_group + "/" if wandb_group is not None else ""
-            name_prefix = name_prefix + wandb_prefix + "_" if wandb_prefix is not None else name_prefix
-            wandb.init(
-                project="forward_locomotion",
-                entity="upenn-pal",
-                name=f"{name_prefix}{run_name}",
-                group=wandb_group,
-                config={
-                    "AC_Args": vars(AC_Args),
-                    "PPO_Args": vars(PPO_Args),
-                    "RunnerArgs": vars(RunnerArgs),
-                    "Cfg": vars(Cfg),
-                },
-                mode="disabled" if no_wandb else "online",
-            )
-
-            env = HistoryWrapper(env)
-            gpu_id = 0
-            runner = Runner(env, device=f"cuda:{gpu_id}")
-            runner.learn(num_learning_iterations=iterations, init_at_random_ep_len=True, eval_freq=100)
-            task_finished = True
-        finally:
-            remove_process_from_lock_file(pid)
-            if lock_file:
-                fcntl.flock(lock_file, fcntl.LOCK_UN)
-                lock_file.close()
-            if task_finished:
-                logger.log_text(f"Process {pid} has finished.")
-                break
-            else:
-                time.sleep(10)
+    env = HistoryWrapper(env)
+    gpu_id = 0
+    runner = Runner(env, device=f"cuda:{gpu_id}")
+    runner.learn(num_learning_iterations=iterations, init_at_random_ep_len=True, eval_freq=100)
 
 
 if __name__ == '__main__':
@@ -183,5 +116,7 @@ if __name__ == '__main__':
     parser.add_argument("--seed", type=int, default=0)
     args = parser.parse_args()
 
-    train_mc(iterations=args.iterations, command_config=args.command_config, reward_config=args.reward_config, dr_config=args.dr_config, eureka_target_velocity=args.eureka_target_velocity,
-              headless=True, no_wandb=args.no_wandb, wandb_group=args.wandb_group, wandb_prefix=args.wandb_prefix, seed=args.seed)
+    train_mc(iterations=args.iterations, command_config=args.command_config, reward_config=args.reward_config,
+             dr_config=args.dr_config, eureka_target_velocity=args.eureka_target_velocity,
+             headless=True, no_wandb=args.no_wandb, wandb_group=args.wandb_group, wandb_prefix=args.wandb_prefix,
+             seed=args.seed)
