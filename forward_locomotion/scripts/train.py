@@ -90,7 +90,6 @@ def train_mc(iterations, command_config, reward_config, dr_config, eureka_target
     pid = os.getpid()
 
     while True:
-        lock_file = None
         task_finished = False
         try:
             lock_file = acquire_lock()
@@ -104,10 +103,6 @@ def train_mc(iterations, command_config, reward_config, dr_config, eureka_target
                 continue
 
             add_process_to_lock_file(pid)
-            if lock_file:
-                fcntl.flock(lock_file, fcntl.LOCK_UN)
-                lock_file.close()
-            lock_file = None
             logger.log_text(f"Process {pid} is running.")
 
             config_go1(Cfg)
