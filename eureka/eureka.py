@@ -52,7 +52,7 @@ def check_subprocess_status_thread(process_queue, signal_queue, num_process_in_p
             for _ in range(num_process_in_parallel - num_process_running):
                 signal_queue.put(None)
                 push_signal_cache.append(None)
-        time.sleep(10)
+        time.sleep(1)
     logging.info("check_subprocess_status_thread finished")
 
 @hydra.main(config_path="cfg", config_name="config", version_base="1.1")
@@ -164,7 +164,16 @@ def main(cfg):
         threading.Thread(target=check_subprocess_status_thread, args=(process_queue, start_signal_queue)).start()
         for response_id in range(cfg.sample):
             # block until a process is allowed to start
-            start_signal_queue.get(block=True)
+            while True:
+                if interrupt.interrupt_callback():
+                    logging.info("main thread detect interrupt")
+                    exit()
+
+                try:
+                    start_signal_queue.get(block=True, timeout=1)
+                    break
+                except Empty:
+                    continue
             response_cur = responses[response_id].message.content
             logging.info(f"Iteration {iter}: Processing Code Run {response_id}")
 
