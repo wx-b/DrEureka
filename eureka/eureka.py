@@ -230,6 +230,7 @@ def main(cfg):
                                  log_status=True, iter_num=iter, response_id=response_id)
             rl_runs.append(process)
             process_queue.put(process)
+        process_queue.put(None)
 
         # Gather RL training results and construct reward reflection
         code_feedbacks = []
