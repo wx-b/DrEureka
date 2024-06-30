@@ -21,7 +21,7 @@ EUREKA_ROOT_DIR = os.getcwd()
 ROOT_DIR = f"{EUREKA_ROOT_DIR}/.."
 
 
-def check_subprocess_status_thread(process_queue, signal_queue, num_process_in_parallel=2):
+def check_subprocess_status_thread(process_queue, signal_queue, num_process_in_parallel=1):
     process_cache = []
     push_signal_cache = []
     while True:

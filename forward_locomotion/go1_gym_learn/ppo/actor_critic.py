@@ -17,7 +17,7 @@ class AC_Args(PrefixProto, cli=False):
 
     env_factor_encoder_branch_input_dims = [18]
     env_factor_encoder_branch_latent_dims = [18]
-    env_factor_encoder_branch_hidden_dims = [[256, 128]]
+    env_factor_encoder_branch_hidden_dims = [[1024, 512, 256, 128]]
 
 
 class ActorCritic(nn.Module):
